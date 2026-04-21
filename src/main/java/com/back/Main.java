@@ -1,31 +1,30 @@
 package com.back;
-import java.util.Arrays;
-import java.util.Scanner;
+import java.util.*;
 
 public class Main {
 
     private static class Quote {
         static int lastQuoteNo = 0;
-//        int quoteNo; // list로 할 때 필요할 듯
+        int quoteId;
         String quote;
         String author;
         Quote(String quote, String author) {
+            this.quoteId = ++lastQuoteNo;
             this.quote = quote;
             this.author = author.isEmpty() ? "입력없음": author;
-            lastQuoteNo++;
         }
+        public int getQuoteNo() { return quoteId;}
         public String getQuote() { return quote;}
         public String getAuthor() { return author;}
         public void setQuote(String quote) { this.quote = quote;}
         public void setAuthor(String author) {this.author = author.isEmpty() ? "입력없음": author;}
-        public boolean isEmpty() { return this.quote.isEmpty();}
-        public void deleteQuote() { quote=""; author="";}
+        public boolean compareNo(int i) {return (quoteId == i);}
     }
-    private static Quote[] quotes; // 요구조건 5단계 배열 사용
+    private static LinkedList<Quote> quotes; // 리스트로 변경
 
     public static void main(String[] args) {
-        CmdMsg currentCmd = CmdMsg.NONE; // 입력 명령
-        quotes = new Quote[16];
+        CmdMsg currentCmd; // 입력 명령
+        quotes = new LinkedList<>();
 
         Scanner sc = new Scanner(System.in);
         String input;
@@ -44,21 +43,13 @@ public class Main {
             switch (currentCmd) {
                 case REGISTER -> register(sc);
                 case VIEW -> view();
-                case DELETE -> delete(CmdMsg.idx);
-                case EDIT -> edit(sc, CmdMsg.idx);
+                case DELETE -> delete(CmdMsg.qid);
+                case EDIT -> edit(sc, CmdMsg.qid);
                 case EXIT -> System.exit(0); // 정상종료
                 default -> {} // do nothing
             }
         }
 
-    }
-    // Quote[] quotes 조작
-    private static void addQuote(Quote q) {
-        if (Quote.lastQuoteNo >= quotes.length) {
-            quotes = Arrays.copyOf(quotes, quotes.length*2);
-        }
-        quotes[Quote.lastQuoteNo-1] = q;
-        System.out.printf(GuideMsg.REGISTER.value, Quote.lastQuoteNo);
     }
 
     // 기능
@@ -69,53 +60,50 @@ public class Main {
         if (quote.isEmpty()) { System.out.print(GuideMsg.EMPTY.value); return;}
         System.out.print(GuideMsg.AUTHOR.value);
         author = sc.nextLine();
-        addQuote(new Quote(quote, author));
+        quotes.add(new Quote(quote, author));
+        System.out.printf(GuideMsg.REGISTER.value, Quote.lastQuoteNo);
     }
     private static void view() {
         System.out.print(GuideMsg.VIEW.value);
-        for(int i=Quote.lastQuoteNo-1; i>=0; i--) {
-            if (!quotes[i].isEmpty()) {
-                System.out.printf("%d / %s / %s\n", i + 1, quotes[i].getAuthor(), quotes[i].getQuote());
-            }
+        Iterator<Quote> dit = quotes.descendingIterator();
+        Quote q;
+        while(dit.hasNext()) {
+            q = dit.next();
+            System.out.printf("%d / %s / %s\n", q.getQuoteNo(), q.getAuthor(), q.getQuote());
         }
     }
-    private static void delete(int idx) {
-        if (idx <= -1 || idx >= quotes.length || quotes[idx] == null || quotes[idx].isEmpty()) {
-            System.out.printf(GuideMsg.ABSENT.value, idx+1);
-            return;
+    private static void delete(int qid) {
+        boolean isDeleted = quotes.removeIf(q -> q.compareNo(qid));
+        if (isDeleted) {
+            System.out.printf(GuideMsg.DELETE.value, qid);
+        } else {
+            System.out.printf(GuideMsg.ABSENT.value, qid);
         }
-        quotes[idx].deleteQuote();
-        System.out.printf(GuideMsg.DELETE.value, idx+1);
     }
-    private static void edit(Scanner sc, int idx) {
-        String quote;
-        if (idx <= -1 || idx >= quotes.length || quotes[idx] == null || quotes[idx].isEmpty()) {
-            System.out.printf(GuideMsg.ABSENT.value, idx+1);
-            return;
-        }
-        System.out.print(GuideMsg.QUOTEOLD.value+quotes[idx].getQuote()+"\n"+GuideMsg.QUOTE.value);
-        quote = sc.nextLine();
-        if (quote.isEmpty()){ System.out.print(GuideMsg.EMPTY.value); return;}
-        quotes[idx].setQuote(quote);
-        System.out.print(GuideMsg.AUTHOROLD.value+quotes[idx].getAuthor()+"\n"+GuideMsg.AUTHOR.value);
-        quotes[idx].setAuthor(sc.nextLine());
+    private static void edit(Scanner sc, int qid) {
+        Quote tmpQ = null;
+        for(Quote q: quotes) { if (q.compareNo(qid)) { tmpQ = q;}}
+        if (tmpQ == null) { System.out.printf(GuideMsg.ABSENT.value, qid); return;}
+        System.out.print(GuideMsg.QUOTEOLD.value+tmpQ.getQuote()+"\n"+GuideMsg.QUOTE.value);
+        String newQ = sc.nextLine();
+        if (newQ.isEmpty()){ System.out.print(GuideMsg.EMPTY.value); return;}
+        tmpQ.setQuote(newQ);
+        System.out.print(GuideMsg.AUTHOROLD.value+tmpQ.getAuthor()+"\n"+GuideMsg.AUTHOR.value);
+        tmpQ.setAuthor(sc.nextLine());
     }
 
     // 입력받을 명령어
     enum CmdMsg {
         NONE, DELETE, EDIT, EXIT, REGISTER, VIEW;
-        static int idx = -1; // 다른 방법?
+        static int qid = -1; // 다른 방법?
         public static CmdMsg from(String input) {
             // 삭제 및 수정
-            if (input.length()>2) {
-                if (input.length()<7) { return NONE;}
-                if (input.startsWith("?id=", 2)) {
-                    try {
-                        idx = Integer.parseInt(input.substring(6))-1;
-                    } catch(Error e) { System.out.print(GuideMsg.EMPTY.value); return NONE;}
-                    if (input.startsWith("삭제")) { return DELETE;}
-                    else if (input.startsWith("수정")){ return EDIT;}
-                }
+            if (input.length()>=7 && input.startsWith("?id=", 2)) {
+                try {
+                    qid = Integer.parseInt(input.substring(6));
+                } catch(Error e) { return NONE;}
+                if (input.startsWith("삭제")) { return DELETE;}
+                else if (input.startsWith("수정")){ return EDIT;}
             }
             // 종료, 등록, 목록
             return switch (input) {
